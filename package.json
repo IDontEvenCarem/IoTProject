@@ -1,0 +1,24 @@
+{
+  "devDependencies": {
+    "typescript": "^4.8.4"
+  },
+  "name": "iotproject",
+  "description": "My solution to a project for a uni IoT class",
+  "version": "1.0.0",
+  "main": "built/index.js",
+  "scripts": {
+    "dev": "npm run build && npm run run",
+    "build": "tsc -p tsconfig.json",
+    "run": "node built"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IDontEvenCarem/IoTProject.git"
+  },
+  "author": "Kajetan Owczarek",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/IDontEvenCarem/IoTProject/issues"
+  },
+  "homepage": "https://github.com/IDontEvenCarem/IoTProject#readme"
+}
