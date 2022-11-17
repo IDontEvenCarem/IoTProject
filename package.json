@@ -1,15 +1,10 @@
 {
-  "devDependencies": {
-    "typescript": "^4.8.4"
-  },
   "name": "iotproject",
   "description": "My solution to a project for a uni IoT class",
   "version": "1.0.0",
   "main": "built/index.js",
   "scripts": {
-    "dev": "npm run build && npm run run",
-    "build": "tsc -p tsconfig.json",
-    "run": "node built"
+    "start": "node src"
   },
   "repository": {
     "type": "git",
@@ -20,5 +15,12 @@
   "bugs": {
     "url": "https://github.com/IDontEvenCarem/IoTProject/issues"
   },
-  "homepage": "https://github.com/IDontEvenCarem/IoTProject#readme"
+  "homepage": "https://github.com/IDontEvenCarem/IoTProject#readme",
+  "dependencies": {
+    "azure-iot-device": "^1.18.1",
+    "azure-iot-device-mqtt": "^1.16.1",
+    "node-opcua": "^2.83.0",
+    "xstream": "^11.14.0",
+    "yargs": "^17.6.2"
+  }
 }
