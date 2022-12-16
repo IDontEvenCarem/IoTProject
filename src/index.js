@@ -5,27 +5,40 @@ const xs = require('xstream').default
 const _ = require('lodash')
 const { MemoryStream } = require('xstream')
 const { changes_only } = require('./operators')
+const { exit } = require('yargs')
+
+let verbose = false
+
+const INFO = msg => verbose ? console.log(msg) : { }
+const WARN = msg => console.log(msg)
+const ERR = msg => console.error(msg)
 
 const args = yargs(hideBin(process.argv))
     .config()
     .env("IOTCONFIG")
-    .option('verbose', { alias: 'v', type: 'boolean', description: 'Enable verbose logging' })
-    .option('endpoint', { alias: 'e', type: 'string', description: 'The URL of the OPC UA endpoint' })
-    .option('device', { alias: 'd', type: 'string', description: 'Name of the device' })
-    .option('connection_string', { alias: 'c', type: 'string', description: 'Azure IoT device connection string' })
-    .demandOption("endpoint", 'You have to provide the OPC UA endpoint')
-    .demandOption('connection_string', "You have to provide the Azure IoT connection string")
-    .demandOption('device', "You have to provide the ID of the device")
-    .check((argv, aliases) => { if (argv.endpoint.length === 0) throw new Error("Endpoint URL cannot be empty"); return true; })
-    .check((argv, aliases) => { if (argv.connection_string.length === 0) throw new Error("Connection string cannot be empty"); return true; })
-    .check((argv, aliases) => { if (argv.device.length === 0) throw new Error("Device name cannot be empty"); return true; })
-    .check((argv, al) => { if (!opc.is_valid_endpointUrl(argv.endpoint)) throw new Error("Invalid OPCUA endpoint"); return true; })
+    .command("config", "Interactively create a PM2 ecosystem file", {}, async (args) => {
+        await require("./config-creator")();
+        exit(0)
+    })
+    .command(["*", "run"], "default command, runs the app", (yargs) => {
+        yargs
+            .option('verbose', { alias: 'v', type: 'boolean', description: 'Enable verbose logging', default: false })
+            .option('endpoint', { alias: 'e', type: 'string', description: 'The URL of the OPC UA endpoint' })
+            .option('device', { alias: 'd', type: 'string', description: 'Name of the device' })
+            .option('connection_string', { alias: 'c', type: 'string', description: 'Azure IoT device connection string' })
+            .demandOption("endpoint", 'You have to provide the OPC UA endpoint')
+            .demandOption('connection_string', "You have to provide the Azure IoT connection string")
+            .demandOption('device', "You have to provide the ID of the device")
+            .check((argv, aliases) => { if (argv.endpoint.length === 0) throw new Error("Endpoint URL cannot be empty"); return true; })
+            .check((argv, aliases) => { if (argv.connection_string.length === 0) throw new Error("Connection string cannot be empty"); return true; })
+            .check((argv, aliases) => { if (argv.device.length === 0) throw new Error("Device name cannot be empty"); return true; })
+            .check((argv, al) => { if (!opc.is_valid_endpointUrl(argv.endpoint)) throw new Error("Invalid OPCUA endpoint"); return true; })
+    }, async (args) => {
+        verbose = args.verbose
+        await Main(args);
+    })
     .parse()
 
-
-const INFO = args.verbose ? msg => console.log(msg) : _ => { }
-const WARN = msg => console.log(msg)
-const ERR = msg => console.error(msg)
 
 
 /**
@@ -34,7 +47,7 @@ const ERR = msg => console.error(msg)
  */
 const cleanup_stack = []
 
-async function Main() {
+async function Main(args) {
     INFO("Setting up signal handling")
     process.addListener('SIGINT', async (signal) => {
         INFO("SIGINT received, cleaning up")
@@ -57,6 +70,10 @@ async function Main() {
 
     // start sending messages there
     INFO("Starting operation")
+
+    // console.log(await interfaces.methods.setProductionRate(50));
+    // console.log(await interfaces.methods.emergencyStop());
+    // console.log(await interfaces.methods.resetErrorStatus());
 
     const temp_stream = changes_only(interfaces.telemetryStream.map(read => read.Temperature))
     temp_stream.subscribe({
@@ -111,6 +128,10 @@ async function MakeOPCConnection(endpoint) {
  * @param {string} device_id 
  */
 async function CreateInterfaces(session, device_id) {
+    if (device_id.endsWith("/")) {
+        device_id = device_id.substring(0, device_id.length - 1)
+    }
+
     const fields = [
         'ProductionStatus',
         'WorkorderId',
@@ -122,7 +143,7 @@ async function CreateInterfaces(session, device_id) {
         'EmergencyStop',
         'ResetErrorStatus'
     ]
-    const node_ids = fields.map(suf => device_id+suf)
+    const node_ids = fields.map(suf => device_id+'/'+suf)
     
     // validate everything that we need is on the device
     const test_reads = await session.read(node_ids.map(
@@ -153,16 +174,19 @@ async function CreateInterfaces(session, device_id) {
     
     state.push(["Name", /^[^\;]+;(.+)$/.exec(device_id)[1]]) // add the device name to the object
 
-    // create stream
-    /** @type {MemoryStream<DeviceReads>} */
-    const telemetryStream = xs.createWithMemory({
+    // store stuff that could be local to the telemetry stream, but because they dont close async, we need them to be closed async
+    const varbox = {
         opc_sub: undefined,
         monitored: undefined,
         monitorItems: undefined,
-        changeCallback: undefined,
+        changeCallback: undefined
+    }
 
+    // create stream
+    /** @type {MemoryStream<DeviceReads>} */
+    const telemetryStream = xs.createWithMemory({
         async start (listener) {
-            this.opc_sub = await session.createSubscription2({
+            varbox.opc_sub = await session.createSubscription2({
                 requestedPublishingInterval: 1000,
                 requestedLifetimeCount: 100,
                 requestedMaxKeepAliveCount: 10,
@@ -170,7 +194,7 @@ async function CreateInterfaces(session, device_id) {
                 publishingEnabled: true,
                 priority: 0
             })
-            this.monitored = await this.opc_sub.monitorItems(
+            varbox.monitored = await varbox.opc_sub.monitorItems(
                 _(node_ids).map(id => ({nodeId: id, attributeId: opc.AttributeIds.Value})).dropRight(2).value(),
                 {
                     samplingInterval: 1000,
@@ -179,28 +203,58 @@ async function CreateInterfaces(session, device_id) {
                 },
                 opc.TimestampsToReturn.Both
             )
-            this.changeCallback = (item, data, idx) => {
+            varbox.changeCallback = (item, data, idx) => {
                 state[idx][1] = data.value.value
                 listener.next(Object.fromEntries(state))
             }
-            this.monitored.on('changed', this.changeCallback)
+            varbox.monitored.on('changed', varbox.changeCallback)
         },
 
         async stop () {
-            this.monitored.off('changed', this.changeCallback)
+            varbox.monitored.off('changed', varbox.changeCallback)
             await monitored.terminate()
             await opc_sub.terminate()
         }
     })
 
+    cleanup_stack.push(async () => {
+        await varbox.monitored.terminate()
+        await varbox.opc_sub.terminate()
+    })
+
     const methods = {
-        // TODO: Finish this
-        async setProductionRate (new_rate) {},
-        async emergencyStop () {},
-        async resetErrorStatus () {}
+        async setProductionRate (new_rate) {
+            console.log(device_id+"/ProductionRate");
+            return session.write({
+                nodeId: device_id+"/ProductionRate",
+                value: {
+                    value: {
+                        dataType: opc.DataType.Int32,
+                        value: new_rate
+                    }
+                },
+                attributeId: opc.AttributeIds.Value
+            })
+        },
+        async emergencyStop () {
+            const objid = opc.coerceNodeId(device_id)
+            const metid = opc.coerceNodeId(device_id+'/EmergencyStop')
+
+            console.log(objid)
+            console.log(metid)
+
+            return session.call({
+                objectId: objid,
+                methodId: metid,
+            })
+        },
+        async resetErrorStatus () {
+            return session.call({
+                objectId: device_id,
+                methodId: device_id+'/ResetErrorStatus'
+            })
+        }
     }
 
     return {telemetryStream, methods}
 }
-
-Main();
