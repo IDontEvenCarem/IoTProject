@@ -128,5 +128,5 @@ module.exports = async function CreateConfig () {
 
     await fs.writeFile(resFilename['config-name'], `module.exports = { apps: ${JSON.stringify(apps)} }`)
 
-    console.log(chalk.green('Succesfully generated the ecosystem file factoryecosystem.config.js'))
+    console.log(chalk.green(`Succesfully generated the ecosystem file ${resFilename['config-name']}`))
 }
