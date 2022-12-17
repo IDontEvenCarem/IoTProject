@@ -52,6 +52,6 @@ typings/
 # dotenv environment variables file
 .env
 .env.test
-
+*ecosystem.config.js
 
 built

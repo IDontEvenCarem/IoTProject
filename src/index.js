@@ -6,6 +6,7 @@ const _ = require('lodash')
 const { MemoryStream } = require('xstream')
 const { changes_only } = require('./operators')
 const { exit } = require('yargs')
+const { ENV_PREFIX } = require('./constants')
 
 let verbose = false
 
@@ -13,38 +14,42 @@ const INFO = msg => verbose ? console.log(msg) : { }
 const WARN = msg => console.log(msg)
 const ERR = msg => console.error(msg)
 
-const args = yargs(hideBin(process.argv))
+import("sudo-block").then(sudoBlock => {
+    sudoBlock.default();
+     
+    yargs(hideBin(process.argv))
     .config()
-    .env("IOTCONFIG")
+    .env(ENV_PREFIX)
     .command("config", "Interactively create a PM2 ecosystem file", {}, async (args) => {
         await require("./config-creator")();
         exit(0)
     })
     .command(["*", "run"], "default command, runs the app", (yargs) => {
         yargs
-            .option('verbose', { alias: 'v', type: 'boolean', description: 'Enable verbose logging', default: false })
-            .option('endpoint', { alias: 'e', type: 'string', description: 'The URL of the OPC UA endpoint' })
-            .option('device', { alias: 'd', type: 'string', description: 'Name of the device' })
-            .option('connection_string', { alias: 'c', type: 'string', description: 'Azure IoT device connection string' })
-            .demandOption("endpoint", 'You have to provide the OPC UA endpoint')
-            .demandOption('connection_string', "You have to provide the Azure IoT connection string")
-            .demandOption('device', "You have to provide the ID of the device")
-            .check((argv, aliases) => { if (argv.endpoint.length === 0) throw new Error("Endpoint URL cannot be empty"); return true; })
-            .check((argv, aliases) => { if (argv.connection_string.length === 0) throw new Error("Connection string cannot be empty"); return true; })
-            .check((argv, aliases) => { if (argv.device.length === 0) throw new Error("Device name cannot be empty"); return true; })
-            .check((argv, al) => { if (!opc.is_valid_endpointUrl(argv.endpoint)) throw new Error("Invalid OPCUA endpoint"); return true; })
+        .option('verbose', { alias: 'v', type: 'boolean', description: 'Enable verbose logging', default: false })
+        .option('endpoint', { alias: 'e', type: 'string', description: 'The URL of the OPC UA endpoint' })
+        .option('device', { alias: 'd', type: 'string', description: 'Name of the device' })
+        .option('connection-string', { alias: 'c', type: 'string', description: 'Azure IoT device connection string' })
+        .demandOption("endpoint", 'You have to provide the OPC UA endpoint')
+        .demandOption('connection-string', "You have to provide the Azure IoT connection string")
+        .demandOption('device', "You have to provide the ID of the device")
+        .check((argv, aliases) => { if (argv.endpoint.length === 0) throw new Error("Endpoint URL cannot be empty"); return true; })
+        .check((argv, aliases) => { if (argv['connection-string'].length === 0) throw new Error("Connection string cannot be empty"); return true; })
+        .check((argv, aliases) => { if (argv.device.length === 0) throw new Error("Device name cannot be empty"); return true; })
+        .check((argv, al) => { if (!opc.is_valid_endpointUrl(argv.endpoint)) throw new Error("Invalid OPCUA endpoint"); return true; })
     }, async (args) => {
         verbose = args.verbose
         await Main(args);
     })
     .parse()
-
-
-
-/**
- * Runs the contained async functions in reverse order when shutting down
- * @type {Function[]}
- */
+}) 
+    
+    
+    
+    /**
+     * Runs the contained async functions in reverse order when shutting down
+     * @type {Function[]}
+    */
 const cleanup_stack = []
 
 async function Main(args) {
