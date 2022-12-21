@@ -356,7 +356,14 @@ async function CreateAzureInterfaces(connectionString, interfaces, sendInterval)
     })
 
     client.onDeviceMethod("MaintenanceDone", async (req, res) => {
-        twin.properties.reported.update({LastMaintenanceDate: Date.now()}, (err) => { if (err) ERR(err)})
+        twin.properties.reported.update({LastMaintenanceDate: Date.now()}, (err) => { 
+            if (err) {
+                ERR(err)
+                res.send(500)
+            } else {
+                res.send(200)
+            }
+        })
     })
 
     // send telemetry to the cloud
