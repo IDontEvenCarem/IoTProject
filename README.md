@@ -7,7 +7,7 @@ My solution to a project for a uni IoT class
  - [x] Connect to the OPCUA server
  - [x] Find the proper device
  - [x] Subscribe to the desired properties
- - [ ] Implement device methods
- - [ ] Send telemetry to Azure
- - [ ] Receive methods from Azure
- - [ ] Do the processing in Azure
+ - [x] Implement device methods
+ - [x] Send telemetry to Azure
+ - [x] Receive methods from Azure
+ - [x] Do the processing in Azure
