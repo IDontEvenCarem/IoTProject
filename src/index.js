@@ -312,6 +312,12 @@ async function CreateAzureInterfaces(connectionString, interfaces, sendInterval)
     // create a stream of error changes
     interfaces.telemetryStream.map(read => read.DeviceError).compose(changes_only).subscribe({
         next(error) {
+            // update twin
+            if (error == 0) {
+                twin.properties.reported.update({Error: undefined}, (err) => { if (err) ERR(err)})
+            } else {
+                twin.properties.reported.update({Error: error, LastErrorDate: Date.now()}, (err) => { if (err) ERR(err)})
+            }
             // send D2C message
             const data = {
                 type: 'error',
@@ -319,9 +325,6 @@ async function CreateAzureInterfaces(connectionString, interfaces, sendInterval)
             }
             const msg = new Message(JSON.stringify(data))
             client.sendEvent(msg)
-
-            // update twin
-            twin.properties.reported.update({Error: error, LastErrorDate: Date.now()}, (err) => { if (err) ERR(err)})
         }
     })
 
